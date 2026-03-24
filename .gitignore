@@ -1,0 +1,36 @@
+
+# DrRacket autosave files
+*.rkt~
+*.rkt.bak
+\#*.rkt#
+\#*.rkt#*#
+
+# generated files
+*.o
+*.s
+*.out
+*.out.dSYM
+*~
+
+# Compiled racket bytecode
+compiled/
+*.zo
+
+# Dependency tracking files
+*.dep
+
+# Python virtual environments
+venv/
+env/
+.venv/
+*.pyc
+__pycache__/
+
+# Books and PDFs
+EoC.pdf
+# macOS system files
+.DS_Store
+
+# Personal notes
+updates.md
+commitmessage.md
