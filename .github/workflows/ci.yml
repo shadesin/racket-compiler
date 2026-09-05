@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Racket and GCC
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes racket gcc make
+
+      - name: Install Racket package dependencies
+        run: raco pkg install --auto graph-lib
+
+      - name: Run compiler test suite
+        run: make test
+
+      - name: Exercise command-line compiler
+        run: make smoke

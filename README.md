@@ -1,220 +1,181 @@
-# Racket Compiler: Lint → x86-64
+# Racket to x86-64 Compiler
 
-A nanopass compiler that translates a subset of the Racket programming language through multiple intermediate languages down to x86-64 assembly. Currently supports the full `Lwhile` milestone with variables, conditionals, loops, and mutation.
+[![CI](https://github.com/shadesin/racket-compiler/actions/workflows/ci.yml/badge.svg)](https://github.com/shadesin/racket-compiler/actions/workflows/ci.yml)
 
-## Overview
+A multi-pass compiler for a statically typed subset of Racket. It
+lowers expression-oriented source programs through explicit intermediate
+representations to native x86-64 assembly, including graph-coloring register
+allocation, tail calls, and garbage-collected vectors.
 
-This compiler demonstrates a complete pipeline from high-level expressions to executable x86 code:
+The project was developed for the IIIT compilers course,
+following Jeremy Siek's *Essentials of Compilation*. Compiler passes and
+project-specific regression tests are student work; the language framework,
+reference interpreters, type checkers, harness, and C runtime began as
+course-provided infrastructure.
 
+## Highlights
+
+- Fourteen explicit compiler passes, each operating on a structured AST.
+- Backward liveness analysis over a control-flow graph.
+- Interference-graph construction with move biasing.
+- Priority-queue DSATUR register allocation across 11 registers.
+- Ordinary stack spilling plus a precise GC root stack for heap pointers.
+- Typed heterogeneous vectors and Cheney copying-collector integration.
+- Direct, indirect, recursive, and properly lowered tail calls.
+- System V x86-64 calls, including source functions with more than six
+  arguments through typed tuple packing.
+- Differential validation through intermediate-language interpreters and
+  native executable tests.
+
+## Supported source language
+
+| Area | Supported forms |
+| --- | --- |
+| Values | 64-bit integers, Booleans, `void`, function references |
+| Expressions | `let`, `if`, `and`, `or`, `not`, `+`, unary/binary `-` |
+| Comparisons | `eq?`, `<`, `<=`, `>`, `>=` |
+| Effects | `read`, `begin`, `set!`, `while` |
+| Heap data | Typed `vector`, `vector-ref`, `vector-set!`, `vector-length` |
+| Functions | Typed top-level definitions, recursion, higher-order references, indirect calls, tail calls |
+
+This is deliberately not a full Racket implementation. General lambdas and
+closure conversion, multiplication/division, strings, floating point, modules,
+macros, and exceptions are outside the active compiler pipeline.
+
+## Pipeline
+
+```text
+source
+  -> shrink
+  -> uniquify
+  -> reveal functions
+  -> limit functions
+  -> expose allocation
+  -> uncover get!
+  -> remove complex operands
+  -> explicate control
+  -> select instructions
+  -> liveness analysis
+  -> build interference
+  -> allocate registers
+  -> patch instructions
+  -> add preludes/conclusions
+  -> x86-64 assembly
 ```
-Source (Racket) → Lwhile → Lvar → Lint → C-lang → x86-64 Assembly
-```
 
-**Status:** Complete through the `Lwhile` milestone with comprehensive test coverage and optimized register allocation.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for representations, calling convention,
+allocation layout, garbage-collector roots, and register allocation details.
 
-## Quick Start
+## Quick start
 
-### Prerequisites
+Requirements:
 
-- Racket (any recent version)
-- GCC (for compiling the C runtime)
+- Racket 8.x or newer
+- GCC or Clang with an x86-64 target
+- GNU Make
+- On Apple Silicon, Rosetta 2 to execute generated x86-64 binaries
 
-### Setup & Testing
+Run the complete test suite:
 
 ```bash
-# 1. Compile the C runtime support
-gcc -c -g -std=c99 runtime.c
-
-# Apple Silicon users targeting x86-64:
-gcc -c -g -std=c99 -arch x86_64 runtime.c
-
-# 2. Run all tests (interpreter + code generation)
-racket run-tests.rkt
-
-# Or use the Makefile
 make test
 ```
 
-## Supported Language Features
+## Command-line compiler
 
-### Lwhile Language
+`compile.rkt` is the command-line entry point for compiling one source program
+outside the test harness. It reads the program, type-checks it, runs the active
+pipeline from `compiler.rkt`, and writes x86-64 assembly. It does not link an
+executable by itself.
 
-The compiler supports programs with the following features:
-
-- **Integers & arithmetic:** `+`, `-` operators
-- **Variables:** lexical scoping with mutation (`set!`)
-- **Conditionals:** `if` expressions
-- **Loops:** `while` loops with `set!`-based mutation tracking
-- **I/O:** `(read)` for integer input
-- **Control flow:** `begin` for sequencing, `(void)` for unit type
-
-**Example:**
-
-```scheme
-; Factorial with while loop
-(let ([n (read)])
-  (let ([result 1])
-    (begin
-      (while (> n 0)
-        (begin
-          (set! result (* result n))
-          (set! n (- n 1))))
-      result)))
-```
-
-## Compiler Pipeline
-
-The compiler applies the following passes in sequence:
-
-| Pass | Purpose |
-|------|---------|
-| `shrink` | Partial evaluation and constant folding |
-| `uniquify` | Rename variables to ensure uniqueness |
-| `uncover-get!` | Track mutation and generate `get!` for mutable reads |
-| `remove-complex-opera*` | Push atomic values to top level |
-| `explicate-control` | Convert to explicit control flow |
-| `select-instructions` | Translate to pseudo-x86 instructions |
-| `uncover-live` | Liveness analysis with iterative dataflow |
-| `build-interference` | Construct register interference graph |
-| `allocate-registers` | DSatur-based register allocation |
-| `patch-instructions` | Fix immediate ranges and special cases |
-| `prelude-and-conclusion` | Insert function prologue/epilogue |
-
-**Output:** x86-64 assembly linked against `runtime.o`
-
-## Key Implementation Details
-
-### Mutation Handling
-
-Variables modified with `set!` are tracked via the `uncover-get!` pass, which:
-- Identifies mutable variables
-- Generates `GetBang` operations for reads of mutable state
-- Ensures correct variable semantics across assignments
-
-### Control Flow
-
-Explicit control flow graphs are built to handle:
-- Conditional branches
-- Loop targets and exits
-- Effect positions (statements vs. expressions)
-
-### Register Allocation
-
-The `allocate-registers` pass uses:
-- **Priority-based DSatur** heuristic for optimal coloring
-- **Interference graph** construction from liveness info
-- Handles cyclic CFGs with iterative worklist algorithm
-
-## File Organization
-
-### Core Compiler
-
-- [compiler.rkt](compiler.rkt) — Main compiler driver and pass pipeline
-- [utilities.rkt](utilities.rkt) — Helper functions and utilities
-
-### Interpreters (Validation Layer)
-
-Each intermediate language has an interpreter for testing:
-
-- Language interpreters: `interp-Lint.rkt`, `interp-Lvar.rkt`, `interp-Lif.rkt`, `interp-Lwhile.rkt`
-- C-lang interpreters: `interp-Cvar.rkt`, `interp-Cif.rkt`, `interp-Cwhile.rkt`
-- Shared: [interp.rkt](interp.rkt) — Base interpreter framework
-
-### Type Checking
-
-- Language checkers: `type-check-Lvar.rkt`, `type-check-Lif.rkt`, `type-check-Lwhile.rkt`
-- C-lang checkers: `type-check-Cvar.rkt`, `type-check-Cif.rkt`, `type-check-Cwhile.rkt`
-
-### Graph & Data Structures
-
-- [priority_queue.rkt](priority_queue.rkt) — Priority queue for DSatur allocation
-- [multigraph.rkt](multigraph.rkt) — Multigraph utilities
-- [graph-printing.rkt](graph-printing.rkt) — Visualization helpers
-
-### Runtime
-
-- [runtime.c](runtime.c) / [runtime.h](runtime.h) — C runtime for `(read)` and I/O
-- [heap.rkt](heap.rkt) — Heap management (future expansion)
-
-### Testing
-
-- [run-tests.rkt](run-tests.rkt) — Main test runner
-- `tests/` — Test programs with expected output (`.rkt`, `.res`, `.in` files)
-- `debug/` — Debug test cases for specific compiler passes
-
-## Testing
-
-The test suite validates:
-
-1. **Interpreter tests** — Each intermediate language's interpreter produces correct results
-2. **Compiler tests** — Generated x86 code executes and produces correct output
-
-**Test families:**
-- `int` — Integer arithmetic
-- `var` — Variables and assignment
-- `cond` — Conditionals
-- `while` — Loops and mutation
-
-Run tests:
+Compile a source program to assembly:
 
 ```bash
-make test                    # Run all tests
-racket run-tests.rkt         # Same
+racket compile.rkt examples/fibonacci.rkt
 ```
 
-## Future Milestones
+This writes `examples/fibonacci.s`. Build it with the runtime using:
 
-Potential extensions (currently not implemented):
+```bash
+make build PROGRAM=examples/fibonacci.rkt
+```
 
-- Function definitions and calls (`Lfun`, `Cfun`)
-- Lambda expressions and closures
-- Vector/array operations
-- Polymorphic functions
-- Gradual typing and dynamic types
-- Any-language constructs
+The source language returns its result from `main`, so the executable's exit
+status is the program result:
 
-## Architecture Notes
+```bash
+./examples/fibonacci.out
+echo $?  # 55
+```
 
-### Intermediate Languages
+Choose paths explicitly when needed:
 
-The compiler chains these intermediate languages:
+```bash
+racket compile.rkt --output /tmp/program.s path/to/program.rkt
+make build PROGRAM=path/to/program.rkt ASM=/tmp/program.s BINARY=/tmp/program.out
+```
 
-1. **Lwhile** — High-level with `while`, `set!`, begin, void
-2. **Lvar** — Variables and conditionals
-3. **Lint** — Integer expressions with `read()`
-4. **Cvar/Cif/Cwhile** — C-like intermediate with explicit control flow
+Pass `--verbose` to the CLI to print pass names as they run.
 
-Each language has:
-- An AST definition
-- An interpreter (reference semantics)
-- Type checker (validation)
-- Compiler passes (translation to next language)
+To compile, link, and run the second example in one workflow:
 
-### Design Patterns
+```bash
+make build PROGRAM=examples/functions-and-vectors.rkt
+./examples/functions-and-vectors.out
+echo $?  # 42
+```
 
-- **Mixin-based OO:** Type checkers and interpreters use Racket class mixins for composition
-- **Pattern matching:** AST traversal via Racket's `match` syntax
-- **Dataflow analysis:** Iterative fixed-point computation for liveness
+## Example
+
+```racket
+(define (increment [n : Integer]) : Integer
+  (+ n 1))
+
+(define (apply-twice [f : (Integer -> Integer)] [n : Integer]) : Integer
+  (f (f n)))
+
+(let ([values (vector 10 40)])
+  (apply-twice increment (vector-ref values 1)))
+```
+
+The compiler emits ordinary AT&T-syntax x86-64, including indirect calls for
+the higher-order application and runtime-managed allocation for the vector.
+The resulting executable returns `42`.
+
+## Tests
+
+`run-tests.rkt` discovers source programs under `tests/` and checks:
+
+1. Source type checking, including expected type errors.
+2. Semantic equivalence after every pass that has a reference interpreter.
+3. Assembly generation and linking with `runtime.c`.
+4. Native program output or exit status against the expected result.
+
+The expanded suite passes 7,187 intermediate-pass checks and 170 native
+x86-64 tests: 7,357 checks in total, with zero failures and zero errors. CI
+runs this suite and an independent CLI compile/link/execute smoke test on
+Linux.
+
+## Repository map
+
+| Path | Purpose |
+| --- | --- |
+| `compiler.rkt` | Compiler passes and active pass registry |
+| `compiler/` | ABI, dataflow, heap-layout, and label-mangling support |
+| `compile.rkt` | User-facing command-line driver |
+| `runtime.c`, `runtime.h` | Runtime and copying garbage collector |
+| `interp-*.rkt` | Reference interpreters for source/intermediate languages |
+| `type-check-*.rkt` | Type checkers for language stages |
+| `utilities.rkt` | AST definitions, assembly printer, and course test harness |
+| `tests/` | Source programs, input fixtures, expected results/type errors |
+| `examples/` | Small programs intended for manual compilation |
+| `debug/` | Focused liveness and interference inspection programs |
+
+## Development notes
+
+- Generated `.s`, `.o`, and `.out` files are ignored.
 
 ## License
 
-See [LICENSE](LICENSE) file.
-
----
-
-**Questions or issues?** Refer to test cases under `tests/` for working examples, or explore the interpreter implementations (`interp-*.rkt`) for language semantics.
-
-### 3) Assemble and link a generated file
-
-```bash
-gcc -g runtime.o foo.s
-```
-
-## Project Structure (High-Level)
-
-- `compiler.rkt`: main pass implementations and pipeline configuration
-- `run-tests.rkt`: test harness invocation
-- `interp-*.rkt`: interpreters for intermediate languages
-- `type-check-*.rkt`: language-specific type checkers
-- `runtime.c`, `runtime.h`: runtime support linked with generated assembly
-- `tests/`: test inputs and expected outputs
+The course support code is distributed under the MIT license retained in
+[LICENSE](LICENSE).
