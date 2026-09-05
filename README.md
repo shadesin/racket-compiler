@@ -2,12 +2,12 @@
 
 [![CI](https://github.com/shadesin/racket-compiler/actions/workflows/ci.yml/badge.svg)](https://github.com/shadesin/racket-compiler/actions/workflows/ci.yml)
 
-An educational multi-pass compiler for a statically typed subset of Racket. It
+A multi-pass compiler for a statically typed subset of Racket. It
 lowers expression-oriented source programs through explicit intermediate
 representations to native x86-64 assembly, including graph-coloring register
 allocation, tail calls, and garbage-collected vectors.
 
-The project was developed by Souradeep Das for the IIIT compilers course,
+The project was developed for the IIIT compilers course,
 following Jeremy Siek's *Essentials of Compilation*. Compiler passes and
 project-specific regression tests are student work; the language framework,
 reference interpreters, type checkers, harness, and C runtime began as
@@ -174,9 +174,6 @@ Linux.
 ## Development notes
 
 - Generated `.s`, `.o`, and `.out` files are ignored.
-- `EoC.pdf` is intentionally ignored and must not be committed.
-- Planned and completed improvements are described in
-  [PORTFOLIO_ROADMAP.md](PORTFOLIO_ROADMAP.md).
 
 ## License
 
