@@ -1,0 +1,6 @@
+; Test: returning a function pointer (selecting between two functions)
+(define (add [x : Integer] [y : Integer]) : Integer (+ x y))
+(define (sub [x : Integer] [y : Integer]) : Integer (- x y))
+(define (select-op [flag : Boolean]) : (Integer Integer -> Integer)
+  (if flag add sub))
+((select-op #t) 30 12)
