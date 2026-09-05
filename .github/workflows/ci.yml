@@ -21,6 +21,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes racket gcc make
 
+      - name: Install Racket package dependencies
+        run: raco pkg install --auto graph-lib
+
       - name: Run compiler test suite
         run: make test
 

@@ -699,14 +699,14 @@ void print_vector(int64_t* vector_ptr)
     int64_t* scan_ptr = vector_ptr;
     int64_t* next_ptr = vector_ptr + len + 1;
 
-    printf("%p=#(", vector_ptr);
+    printf("%p=#(", (void*)vector_ptr);
     scan_ptr += 1;
     int64_t isPointerBits = get_vec_ptr_bitfield(tag);
     while (scan_ptr != next_ptr) {
       if ((isPointerBits & 1) == 1 && is_ptr((int64_t*)*scan_ptr)) {
         print_vector(to_ptr((int64_t*)*scan_ptr));
       } else {
-        printf("%lld", (int64_t)*scan_ptr);
+        printf("%" PRId64, *scan_ptr);
       }
       isPointerBits = isPointerBits >> 1;
       scan_ptr += 1;
